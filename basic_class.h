@@ -230,3 +230,17 @@ public:
 class lattice {
 public:
 };
+
+// Class of input parameters
+class inputPara{
+public:
+    double* frqs; // frequencies of each mode in a cavity.
+    double* V0s; // Existing voltage of each mode in a cavity at the beginning.
+    double* RoQs; // R over Qs of each mode in a cavity.
+    double* Qs; // Loaded Qs of each mode in a cavity.
+    double* ks; // loss factors of each mode in a cabity.
+    double R=610.1754; // radius of the ring.
+    double gammaT; // Transision energy of the ring.
+    
+};
+
