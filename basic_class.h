@@ -11,12 +11,13 @@ double pi = 3.1415926;
 // Class of Bunch
 class bunch {
 
+
+public:
 	double M = 1;    /* mass number*/
 	double N = 1;    /* charge number*/
 	double q = N*1.60217662e-19;
 	double m = M*9.10938356e-31;
 
-public:
 	unsigned int Np;
 	double gamma; // reference gamma of the bunch.
 	double *x, *y, *t, *px, *py, *ga;
@@ -151,22 +152,44 @@ public:
 // Class of cavity
 class cavity {
 public:
-	double frq; // Frequency of the cavity, [MHz]
-	double V0; // Voltage of the cavity, [MV]
-
+	double *frq; // Frequency of the cavity, [MHz]
+	double *V0r; // Real parts of the Voltage of the cavity, [MV],x,y,z direction in the fashion of [Vx1,Vy1,Vz1,Vx2,Vy2,Vz2,...,VxN,VyN,VzN]
+	double *V0i; // Imaginary parts of the Voltage of the cavity,
+    double *k; // loss factors for each mode, use this to calculate wake of each mode.
+    double *tau_invert; // decay factor for each mode 
+    double *phi; // phase of each mode.
+    int N;// number of modes to consider
+    int bnch_cout = 0; // The number of bunches that has already passed the cavity, used to calculate wake field.
+    
 	cavity() {
-		frq = 704;
-		V0 = 20;
+		frq = new double[N]{0};
+		phi = new double[N];
+		V0r = new double[N*3];
+		V0i = new double[N*3];
+		k = new double[N];
+		tau_invert = new double[N];
 	};
+	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, should be slow as hell...
+	void wake_Naive(bunch& bnch){
+	    for(int i = 0;i<N;++i){ // iterate over number of modes.
+	        for (int j = 0;j<bnch.Np;++j){ // iterate over every particles.
+	            V0r[i] +=k[i]*bnch.N*cos(2*pi*frq[i]*bnch.t[i]);
+	        }
+	    }
+	
+	};
+	
 	void update_coord(bunch& bnch) {
+	    for (int j = 0;j<N;++j){ // iterate over all modes
 #pragma omp parallel for        
-		for (int i = 0; i<bnch.Np; ++i) {
-			bnch.x[i] += 0;
-			bnch.y[i] += 0;
-			bnch.t[i] += 0;
-			bnch.px[i] += 0;
-			bnch.py[i] += 0;
-			bnch.ga[i] += V0*sin(2 * pi*frq*bnch.t[i]);
+		    for (int i = 0; i<bnch.Np; ++i) { // iterate over all particles
+			    bnch.x[i] += 0;
+			    bnch.y[i] += 0;
+			    bnch.t[i] += 0;
+			    bnch.px[i] += V0[j]*sin(2 * pi*frq[j]*bnch.t[i]+phi[j])*exp(-(bnch.t[i]+t0)*tau_invert[j]); // kick in x direction.
+			    bnch.py[i] += V0[j+1]*sin(2 * pi*frq[j]*bnch.t[i]+phi[j])*exp(-(bnch.t[i]+t0)*tau_invert[j]); // kick in y direction.
+			    bnch.ga[i] += V0[j+2]*sin(2 * pi*frq[j]*bnch.t[i])*exp(-(bnch.t[i]+t0)*tau_invert[j]); //kick in z direction.
+		    }
 		}
 	};
 };
