@@ -176,7 +176,7 @@ public:
 	void wake_Naive(bunch& bnch){
 	    for(int i = 0;i<N;++i){ // iterate over number of modes.
 	        for (int j = 0;j<bnch.Np;++j){ // iterate over every particles.
-	            V0r[i] +=k[i]*bnch.N*cos(2*pi*frq[i]*bnch.t[i]);
+	            V0r[i+2] +=k[i]*bnch.N*cos(2*pi*frq[i]*bnch.t[i]);
 	        }
 	    }
 	};
@@ -190,10 +190,10 @@ public:
 			    //bnch.x[i] += 0;
 			    //bnch.y[i] += 0;
 			    //bnch.t[i] += 0;
-			    double sinphi = sin(2 * pi*fj*bnch.t[i]+phi[j]);
-			    bnch.px[i] += V0r[j]*sinphi*exp(-(bnch.t[i])*tau); // kick in x direction.
-			    bnch.py[i] += V0r[j+1]*sinphi*exp(-(bnch.t[i])*tau); // kick in y direction.
-			    bnch.ga[i] += V0r[j+2]*sinphi*exp(-(bnch.t[i])*tau); //kick in z direction.
+			    double cosphi = cos(2 * pi*fj*bnch.t[i]+phi[j]);
+			    bnch.px[i] += V0r[j]* cosphi*exp(-(bnch.t[i])*tau); // kick in x direction.
+			    bnch.py[i] += V0r[j+1]* cosphi*exp(-(bnch.t[i])*tau); // kick in y direction.
+			    bnch.ga[i] += V0r[j+2]* cosphi*exp(-(bnch.t[i])*tau); //kick in z direction.
 		    }
 		}
 	};
