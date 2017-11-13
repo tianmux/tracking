@@ -57,5 +57,5 @@ int main() {
 	std::cout << "Time spend on dumping the bunch to file (serial):" << time * 1000 << " ms" << std::endl;
 	*/
 
-	return 1;
+	return 0;
 }
