@@ -42,7 +42,7 @@ int main() {
 
 	// Try to iterate all particles in a bunch to update and apply the kicks
 	start_time = omp_get_wtime();
-	unsigned int N_turns = 100;
+	unsigned int N_turns = 5;
 	for (unsigned int i = 0; i<N_turns; ++i) {
 		cvt.update_coord(bm1.bnch);
 		rng.update_coord(bm1.bnch);

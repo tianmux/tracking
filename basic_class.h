@@ -149,6 +149,8 @@ public:
 
 	// 
 };
+
+
 // Class of cavity
 class cavity {
 public:
@@ -158,37 +160,39 @@ public:
     double *k; // loss factors for each mode, use this to calculate wake of each mode.
     double *tau_invert; // decay factor for each mode 
     double *phi; // phase of each mode.
-    int N;// number of modes to consider
+    int N=2;// number of modes to consider
     int bnch_cout = 0; // The number of bunches that has already passed the cavity, used to calculate wake field.
     
 	cavity() {
-		frq = new double[N]{0};
+		frq = new double[N];
 		phi = new double[N];
 		V0r = new double[N*3];
 		V0i = new double[N*3];
-		k = new double[N];
+		k = new double[N*3];
 		tau_invert = new double[N];
 	};
-	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, should be slow as hell...
+	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, slow as hell...
 	void wake_Naive(bunch& bnch){
 	    for(int i = 0;i<N;++i){ // iterate over number of modes.
 	        for (int j = 0;j<bnch.Np;++j){ // iterate over every particles.
 	            V0r[i] +=k[i]*bnch.N*cos(2*pi*frq[i]*bnch.t[i]);
 	        }
 	    }
-	
 	};
 	
 	void update_coord(bunch& bnch) {
 	    for (int j = 0;j<N;++j){ // iterate over all modes
+	        double fj=frq[j];
+	        double tau=tau_invert[j];
 #pragma omp parallel for        
 		    for (int i = 0; i<bnch.Np; ++i) { // iterate over all particles
-			    bnch.x[i] += 0;
-			    bnch.y[i] += 0;
-			    bnch.t[i] += 0;
-			    bnch.px[i] += V0[j]*sin(2 * pi*frq[j]*bnch.t[i]+phi[j])*exp(-(bnch.t[i]+t0)*tau_invert[j]); // kick in x direction.
-			    bnch.py[i] += V0[j+1]*sin(2 * pi*frq[j]*bnch.t[i]+phi[j])*exp(-(bnch.t[i]+t0)*tau_invert[j]); // kick in y direction.
-			    bnch.ga[i] += V0[j+2]*sin(2 * pi*frq[j]*bnch.t[i])*exp(-(bnch.t[i]+t0)*tau_invert[j]); //kick in z direction.
+			    //bnch.x[i] += 0;
+			    //bnch.y[i] += 0;
+			    //bnch.t[i] += 0;
+			    double sinphi = sin(2 * pi*fj*bnch.t[i]+phi[j]);
+			    bnch.px[i] += V0r[j]*sinphi*exp(-(bnch.t[i])*tau); // kick in x direction.
+			    bnch.py[i] += V0r[j+1]*sinphi*exp(-(bnch.t[i])*tau); // kick in y direction.
+			    bnch.ga[i] += V0r[j+2]*sinphi*exp(-(bnch.t[i])*tau); //kick in z direction.
 		    }
 		}
 	};
