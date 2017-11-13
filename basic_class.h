@@ -171,7 +171,8 @@ public:
 		k = new double[N*3];
 		tau_invert = new double[N];
 	};
-	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, slow as hell...
+	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, 
+	// Equavlent to convolute the bunch with wake function, slow as hell...
 	void wake_Naive(bunch& bnch){
 	    for(int i = 0;i<N;++i){ // iterate over number of modes.
 	        for (int j = 0;j<bnch.Np;++j){ // iterate over every particles.
