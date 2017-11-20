@@ -1,4 +1,5 @@
 #include <vector>
+#include <algorithm>
 #include <iostream>
 #include <random>
 
@@ -10,33 +11,45 @@ double pi = 3.1415926;
 
 // Class of Bunch
 class bunch {
-
-
 public:
-	double M = 1;    /* mass number*/
-	double N = 1;    /* charge number*/
+	double M = 1e4;    /* mass number*/
+	double N = 1e4;    /* charge number*/
 	double q = N*1.60217662e-19;
 	double m = M*9.10938356e-31;
-
+    double gamma0 = 6; // everage gamma of the bunch. 
+    double p0 = sqrt(gamma0*gamma0-1)*m*c/m/c/c;
+    
 	unsigned int Np;
-	double gamma; // reference gamma of the bunch.
-	double *x, *y, *t, *px, *py, *ga;
-	double *sixD;
+
+
+	std::vector<double> x;
+	std::vector<double> y;
+	std::vector<double> t;
+	std::vector<double> px;
+	std::vector<double> py;
+	std::vector<double> ga;
+	std::vector<double> dt;
+
+	std::vector<int> index;// holds the sorted indices of the particles, sort is based time coordinates of the particle. 
+
 	// Initialize with given normal distribution parameters
 	bunch(unsigned int disType,
 		std::vector<double> spc0, // vector that contain centers of distribution in spacial coordinates
 		std::vector<double> mmt0, // vector that contain centers of distribution in momentum coordinates
 		std::vector<double> spcSig, // vector that contain sigma of distribution in spacial coordinates
 		std::vector<double> mmtSig, // vector that contain sigma of distribution in momentum coordinates
-		unsigned int N) {
-		Np = N;
-		x = new double[Np];
-		y = new double[Np];
-		t = new double[Np];
-		px = new double[Np];
-		py = new double[Np];
-		ga = new double[Np];
-		sixD = new double[Np * 6];
+		unsigned int Npar) {
+		Np = Npar;
+        
+		x.resize(Np);
+		y.resize(Np);
+		t.resize(Np);
+		px.resize(Np);
+		py.resize(Np);
+		ga.resize(Np);
+		dt.resize(Np);
+        index.resize(Np);
+		
 		/* So far only the Gaussian distribution is supported */
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(spc0[0], spcSig[0]); // normal distribution in x
@@ -45,35 +58,29 @@ public:
 		std::normal_distribution<double> dist3(mmt0[0], mmtSig[0]); // normal distribution in px
 		std::normal_distribution<double> dist4(mmt0[1], mmtSig[1]); // normal distribution in py
 		std::normal_distribution<double> dist5(mmt0[2], mmtSig[2]); // normal distribution in pz
-																	// initialize the particles in one bunch in parallel.
+	    // initialize the particles in one bunch in parallel.
 #pragma omp parallel for
 		for (int j = 0; j<Np; ++j) {
 			x[j] = dist0(generator);
 			y[j] = dist1(generator);
 			t[j] = dist2(generator);
-			px[j] = dist3(generator);
-			py[j] = dist4(generator);
-			ga[j] = dist5(generator);
-			sixD[j] = x[j];
-			sixD[j+1] = y[j];
-			sixD[j+2] = t[j];
-			sixD[j+3] = px[j];
-			sixD[j+4] = py[j];
-			sixD[j+5] = ga[j];
+			px[j] = dist3(generator)*p0;
+			py[j] = dist4(generator)*p0;
+			ga[j] = (dist5(generator)+1)*p0;
+			index[j] = j;
 		}
 	};
 
 	// Initialize with defualt normal distribution.
 	bunch(unsigned int N) {
 		Np = N;
-		x = new double[Np];
-		y = new double[Np];
-		t = new double[Np];
-		px = new double[Np];
-		py = new double[Np];
-		ga = new double[Np];
-		sixD = new double[Np * 6];
-
+		x.resize(Np);
+		y.resize(Np);
+		t.resize(Np);
+		px.resize(Np);
+		py.resize(Np);
+		ga.resize(Np);
+        index.resize(Np);
 		/* So far only the Gaussian distribution is supported */
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
@@ -82,24 +89,56 @@ public:
 		std::normal_distribution<double> dist3(0, 1e-3); // normal distribution in px
 		std::normal_distribution<double> dist4(0, 1e-3); // normal distribution in py
 		std::normal_distribution<double> dist5(0, 1e-3); // normal distribution in pz
-														 // initialize the particles in one bunch in parallel.
+		// initialize the particles in one bunch in parallel.
 #pragma omp parallel for
 		for (int j = 0; j<Np; ++j) {
 			x[j] = dist0(generator);
 			y[j] = dist1(generator);
 			t[j] = dist2(generator);
-			px[j] = dist3(generator);
-			py[j] = dist4(generator);
-			ga[j] = dist5(generator);
-			sixD[j] = x[j];
-			sixD[j + 1] = y[j];
-			sixD[j + 2] = t[j];
-			sixD[j + 3] = px[j];
-			sixD[j + 4] = py[j];
-			sixD[j + 5] = ga[j];
+			px[j] = dist3(generator)*p0;
+			py[j] = dist4(generator)*p0;
+			ga[j] = (dist5(generator)+1)*p0;
+			index[j] = j;
 		}
 	};
-
+// Initialize with defualt normal distribution.
+	bunch() {
+		Np = 1;
+		x.resize(Np);
+		y.resize(Np);
+		t.resize(Np);
+		px.resize(Np);
+		py.resize(Np);
+		ga.resize(Np);
+        index.resize(Np);
+		/* So far only the Gaussian distribution is supported */
+		std::default_random_engine generator; // Normal distribution generator
+		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
+		std::normal_distribution<double> dist1(0, 1e-3); // normal distribution in y
+		std::normal_distribution<double> dist2(0, 1e-3); // normal distribution in z
+		std::normal_distribution<double> dist3(0, 1e-3); // normal distribution in px
+		std::normal_distribution<double> dist4(0, 1e-3); // normal distribution in py
+		std::normal_distribution<double> dist5(0, 1e-3); // normal distribution in pz
+		// initialize the particles in one bunch in parallel.
+#pragma omp parallel for
+		for (int j = 0; j<Np; ++j) {
+			x[j] = dist0(generator);
+			y[j] = dist1(generator);
+			t[j] = dist2(generator);
+			px[j] = dist3(generator)*p0;
+			py[j] = dist4(generator)*p0;
+			ga[j] = (dist5(generator)+1)*p0;
+			index[j] = j;
+		}
+	};
+    // get the sorted index based on the time coordinates of the particles.
+    void sort(){
+        std::sort(index.begin(),index.end(),[&](const double& a,const double& b){return (t[a]<t[b]);}
+        );
+    };
+    void calculate_dt(){
+        
+    }
 	// print the 6D coordiantes of a couple of particle, mainly for debug
 	void display() {
 
@@ -112,6 +151,7 @@ public:
 		for (int i = 0; i<Np; ++i) {
 			os << x[i] << "," << y[i] << "," << t[i] << ";" << px[i] << "," << py[i] << "," << ga[i] << '\n';
 		}
+		fb.close();
 	};
 
 };
@@ -121,14 +161,17 @@ class beam {
 public:
 	double delay; // delay between adjustant bunches, [ns]
 	double gap; // gap between bunch trains, [ns]
-
-	bunch bnch = bunch(1);
+    unsigned int N_bnch; // total number of bunches.
+	std::vector<bunch> bnches;
 
 	// Defualt initializer.
-	beam(unsigned int N) {
+	beam(unsigned int N,unsigned int N_bnches) {
+        bnches.resize(N_bnches);
 		delay = 1;
 		gap = 20;
-		bnch = bunch(N);
+        for (int i = 0;i<N_bnches;++i){
+		    bnches[i] = bunch(N);
+		}
 	};
 
 	// Initialize with given normal distribution parameters
@@ -139,14 +182,15 @@ public:
 		std::vector<double> mmt0, // vector that contain centers of distribution in momentum coordinates
 		std::vector<double> spcSig, // vector that contain sigma of distribution in spacial coordinates
 		std::vector<double> mmtSig, // vector that contain sigma of distribution in momentum coordinates
-		unsigned int N) {
-
+		unsigned int N, unsigned int N_bnches) // particles per bunch and bunches per beam.
+		{
+        bnches.resize(N_bnches);
 		delay = dly;
 		gap = gp;
-		bnch = bunch(1, spc0, mmt0, spcSig, mmtSig, N);
+		for (int i = 0;i<N_bnches;++i){
+		    bnches[i] = bunch(1, spc0, mmt0, spcSig, mmtSig, N);
+		}
 	};
-
-
 	// 
 };
 
@@ -154,46 +198,120 @@ public:
 // Class of cavity
 class cavity {
 public:
-	double *frq; // Frequency of the cavity, [MHz]
-	double *V0r; // Real parts of the Voltage of the cavity, [MV],x,y,z direction in the fashion of [Vx1,Vy1,Vz1,Vx2,Vy2,Vz2,...,VxN,VyN,VzN]
-	double *V0i; // Imaginary parts of the Voltage of the cavity,
-    double *k; // loss factors for each mode, use this to calculate wake of each mode.
-    double *tau_invert; // decay factor for each mode 
-    double *phi; // phase of each mode.
-    int N=2;// number of modes to consider
-    int bnch_cout = 0; // The number of bunches that has already passed the cavity, used to calculate wake field.
+	std::vector<double> frq; // Frequency of the cavity, [MHz]
+	std::vector<double> V0xR,V0yR,V0zR; // Real parts of the Voltage of the cavity, [MV]
+	std::vector<double> V0xI,V0yI,V0zI; // Imaginary parts of the Voltage of the cavity, [MV]
+	
+	
+    std::vector<std::vector<double>> VxTauR;
+	std::vector<std::vector<double>> VyTauR;
+	std::vector<std::vector<double>> VzTauR;
+	std::vector<std::vector<double>> VxTauI;
+	std::vector<std::vector<double>> VyTauI;
+	std::vector<std::vector<double>> VzTauI;// vectors to hold the cumulated wake info at each time point (corresponding to each particle), one vector for each mode.
+
+    std::vector<double> kx; 
+    std::vector<double> ky;
+    std::vector<double> kz;// loss factors for each mode, use this to calculate wake of each mode.
+    std::vector<double> tau_invert; // one over tau, save some calculation for each particle.
+    std::vector<double> phi; // phase of each mode.
+    int N_mod=1;// number of modes to consider
+    int bnch_count = 0; // The number of bunches that has already passed the cavity, used to calculate wake field.
     
 	cavity() {
-		frq = new double[N];
-		phi = new double[N];
-		V0r = new double[N*3];
-		V0i = new double[N*3];
-		k = new double[N*3];
-		tau_invert = new double[N];
+		frq.resize(N_mod,0.0);
+		phi.resize(N_mod,0.0);
+		V0xR.resize(N_mod,0.0);
+		V0yR.resize(N_mod,0.0);
+		V0zR.resize(N_mod,0.0);
+		V0xI.resize(N_mod,0.0);
+		V0yI.resize(N_mod,0.0);
+		V0zI.resize(N_mod,0.0);
+		VxTauR.resize(N_mod);
+		VyTauR.resize(N_mod);
+		VzTauR.resize(N_mod);
+		VxTauI.resize(N_mod);
+		VyTauI.resize(N_mod);
+		VzTauI.resize(N_mod);
+		kx.resize(N_mod,0.0);
+		ky.resize(N_mod,0.0);
+		kz.resize(N_mod,0.0);
+		tau_invert.resize(N_mod,0.0);
 	};
+	
 	// Most naive way of calculating the wake, basically sum all the wake from each macro particles for each mode, 
 	// Equavlent to convolute the bunch with wake function, slow as hell...
-	void wake_Naive(bunch& bnch){
-	    for(int i = 0;i<N;++i){ // iterate over number of modes.
-	        for (int j = 0;j<bnch.Np;++j){ // iterate over every particles.
-	            V0r[i+2] +=k[i]*bnch.N*cos(2*pi*frq[i]*bnch.t[i]);
+	
+	void wake_Naive(beam& bm, bunch& bnch){
+
+	    for (int i = 0;i<N_mod;++i){
+	        VxTauR[i].resize(bnch.Np+1,0); // extra one element at the end, use to store the wake in this mode when bunch leaves the cavity.
+	        VyTauR[i].resize(bnch.Np+1,0);
+	        VzTauR[i].resize(bnch.Np+1,0);
+	        VxTauI[i].resize(bnch.Np+1,0); 
+	        VyTauI[i].resize(bnch.Np+1,0);
+	        VzTauI[i].resize(bnch.Np+1,0);
+	    }
+        int j = 0;
+#pragma omp parallel for private(j)
+	    for(int i = 0;i<N_mod;++i){ // iterate over number of modes.
+	        double Vbx = kx[i]*bnch.N;// always negative real.
+	        double Vby = ky[i]*bnch.N;// always negative(?) imaginary.
+	        double Vbz = kz[i]*bnch.N;// always negative(?) imaginary.
+	        double decay = exp(-bm.delay*tau_invert[i]);
+	        VxTauR[i][bnch.Np] = VxTauR[i][bnch.Np]*decay;
+	        VyTauR[i][bnch.Np] = VyTauR[i][bnch.Np]*decay;
+	        VzTauR[i][bnch.Np] = VzTauR[i][bnch.Np]*decay;
+	        VxTauI[i][bnch.Np] = VxTauI[i][bnch.Np]*decay;
+	        VyTauI[i][bnch.Np] = VyTauI[i][bnch.Np]*decay;
+	        VzTauI[i][bnch.Np] = VzTauI[i][bnch.Np]*decay;
+	        
+	        VxTauR[i][0] = VxTauR[i][bnch.Np];
+	        VyTauR[i][0] = VyTauR[i][bnch.Np];
+	        VzTauR[i][0] = VzTauR[i][bnch.Np];
+	        VxTauI[i][0] = VxTauI[i][bnch.Np];
+	        VyTauI[i][0] = VyTauI[i][bnch.Np];
+	        VzTauI[i][0] = VzTauI[i][bnch.Np];
+	        
+//	    #pragma omp for
+	        for (j = 1;j<bnch.Np;++j){ // iterate over every particles. 
+	                                   // ith particle sees the wake of all
+	                                   // previous particles with a phase shift
+	                                   // iw(t(i)-t(i-1))
+	                                   // ignore the decay of the wake between
+	                                   // two macro particles. 
+	            double dt = bnch.t[bnch.index[j]]-bnch.t[bnch.index[j-1]];
+	            double cosin = cos(2*pi*frq[i]*dt);
+	            double sine = sin(2*pi*frq[i]*dt);
+	            VxTauR[i][j] = VxTauR[i][j-1]*cosin-(VxTauI[i][j-1]+Vbx)*sine;
+	            VyTauR[i][j] = VyTauR[i][j-1]*cosin-(VyTauI[i][j-1]+Vby)*sine;
+	            VzTauR[i][j] = (VzTauR[i][j-1]+Vbz)*cosin-VzTauI[i][j-1]*sine;
+	            VxTauI[i][j] = VxTauR[i][j-1]*sine+(VxTauI[i][j-1]+Vbx)*cosin;
+	            VyTauI[i][j] = VyTauR[i][j-1]*sine+(VyTauI[i][j-1]+Vby)*cosin;
+	            VzTauI[i][j] = (VzTauR[i][j-1]+Vbz)*sine+VzTauI[i][j-1]*cosin;
 	        }
 	    }
 	};
 	
 	void update_coord(bunch& bnch) {
-	    for (int j = 0;j<N;++j){ // iterate over all modes
-	        double fj=frq[j];
-	        double tau=tau_invert[j];
-#pragma omp parallel for        
-		    for (int i = 0; i<bnch.Np; ++i) { // iterate over all particles
-			    //bnch.x[i] += 0;
-			    //bnch.y[i] += 0;
-			    //bnch.t[i] += 0;
-			    double cosphi = cos(2 * pi*fj*bnch.t[i]+phi[j]);
-			    bnch.px[i] += V0r[j]* cosphi*exp(-(bnch.t[i])*tau); // kick in x direction.
-			    bnch.py[i] += V0r[j+1]* cosphi*exp(-(bnch.t[i])*tau); // kick in y direction.
-			    bnch.ga[i] += V0r[j+2]* cosphi*exp(-(bnch.t[i])*tau); //kick in z direction.
+	    double c_invert = 1/c;
+	    //wake_Naive(bnch);
+#pragma omp parallel	    
+	    for (int i = 0;i<N_mod;++i){ // iterate over all modes
+	        double fi=frq[i];
+	        double taui=tau_invert[i];
+#pragma omp for
+		    for (int j = 0; j<bnch.Np; ++j) { // iterate over all particles
+
+			    int tempID = bnch.index[j];
+			    double cosphi = cos(2 * pi*fi*bnch.t[tempID]);
+			    double sinphi = sin(2 * pi*fi*bnch.t[tempID]);
+			    double expi = exp(-(bnch.t[tempID])*taui);
+			    // The voltage each particle sees is the real part of the complex voltage in cavity at that time, 
+			    // It should be the combination of the cavity voltage and half of the wake_voltage, 
+			    bnch.px[tempID] += c_invert*(V0xR[i]*cosphi-V0xI[i]*sinphi+VxTauR[i][j]*0.5); // kick in x direction.
+			    bnch.py[tempID] += c_invert*(V0yR[i]*cosphi-V0yI[i]*sinphi+VyTauR[i][j]*0.5); // kick in y direction.
+			    bnch.ga[tempID] += c_invert*(V0zR[i]*cosphi-V0zI[i]*sinphi+VzTauR[i][j]*0.5); // kick in z direction.
 		    }
 		}
 	};
@@ -254,6 +372,22 @@ public:
 	};
 };
 
+// Class of drift space
+class drift_space{
+public:
+    double L;// length of the drift space.
+    drift_space(double dft_L = 1){
+        L = dft_L;// Default length is 1 m.
+    }
+    void update_coord(bunch& bnch){
+        double p0_invert = 1/bnch.p0;
+#pragma omp paprallel for 
+        for (int i = 0;i<bnch.Np;++i){
+            bnch.x[i] += L*bnch.px[i]*p0_invert;
+            bnch.y[i] += L*bnch.py[i]*p0_invert;
+        }
+    }
+};
 // Class of lattice
 class lattice {
 public:
