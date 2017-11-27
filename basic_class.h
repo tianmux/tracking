@@ -16,8 +16,8 @@ public:
 	double N = 1e4;    /* charge number*/
 	double q = N*1.60217662e-19;
 	double m = M*9.10938356e-31;
-    double gamma0 = 6; // everage gamma of the bunch. 
-    double p0 = sqrt(gamma0*gamma0-1)*m*c/m/c/c;
+    double gamma0 = 60; // everage gamma of the bunch. 
+    double p0 = sqrt(gamma0*gamma0-1)*m*c;
     
 	unsigned int Np;
 
@@ -85,7 +85,7 @@ public:
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
 		std::normal_distribution<double> dist1(0, 1e-3); // normal distribution in y
-		std::normal_distribution<double> dist2(0, 1e-3); // normal distribution in z
+		std::normal_distribution<double> dist2(0, 1e-10); // normal distribution in z
 		std::normal_distribution<double> dist3(0, 1e-3); // normal distribution in px
 		std::normal_distribution<double> dist4(0, 1e-3); // normal distribution in py
 		std::normal_distribution<double> dist5(0, 1e-3); // normal distribution in pz
@@ -294,7 +294,7 @@ public:
 	};
 	
 	void update_coord(bunch& bnch) {
-	    double c_invert = 1/c;
+	    double c_invert = bnch.q/c;
 	    //wake_Naive(bnch);
 #pragma omp parallel	    
 	    for (int i = 0;i<N_mod;++i){ // iterate over all modes

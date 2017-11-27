@@ -40,7 +40,8 @@ int main() {
 	// Try initialize a cavity
 	cavity cvt = cavity();
 	cvt.frq[0] = 704e6;
-	cvt.V0xR[0] = 1;
+	cvt.V0xR[0] = 1e5;
+	cvt.V0xI[0] = 0;
 	ring rng = ring();
 	drift_space dft = drift_space(3);
     std::cout<<"Initialize cavity and ring successfully."<<std::endl;
