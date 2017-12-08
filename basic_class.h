@@ -4,6 +4,8 @@
 #include <fstream>
 #include <random>
 #include <math.h>
+#include <parallel/algorithm>
+#include <parallel/numeric>
 
 /*Global constants*/
 
@@ -34,6 +36,10 @@ public:
 	std::vector<double> py;
 	std::vector<double> pz;
 
+    std::vector<double> M1; // means of all coordinates;
+    std::vector<double> M2; // variances of all coordinates;
+    std::vector<double> Emittance; // emittances in three directions;
+    
 
 	std::vector<int> index;// holds the sorted indices of the particles, sort is based time coordinates of the particle. 
 
@@ -53,7 +59,10 @@ public:
 		py.resize(Np);
 		pz.resize(Np);
         index.resize(Np);
-		
+		M1.resize(6,0);
+        M2.resize(6,0);
+        Emittance.resize(3,0);
+        
 		/* So far only the Gaussian distribution is supported */
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(spc0[0], spcSig[0]); // normal distribution in x
@@ -85,14 +94,17 @@ public:
 		py.resize(Np);
 		pz.resize(Np);
         index.resize(Np);
+        M1.resize(6,0);
+        M2.resize(6,0);
+        Emittance.resize(3,0);
 		/* So far only the Gaussian distribution is supported */
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
 		std::normal_distribution<double> dist1(0, 1e-3); // normal distribution in y
-		std::normal_distribution<double> dist2(0, 1e-10); // normal distribution in t
+		std::normal_distribution<double> dist2(0, 1.4e-9); // normal distribution in t
 		std::normal_distribution<double> dist3(0, 1e-4); // normal distribution in px
 		std::normal_distribution<double> dist4(0, 1e-4); // normal distribution in py
-		std::normal_distribution<double> dist5(0, 1e-4); // normal distribution in gamma
+		std::normal_distribution<double> dist5(0, 0.00225); // normal distribution in gamma
 		// initialize the particles in one bunch in parallel.
 #pragma omp parallel for
 		for (int j = 0; j<Np; ++j) {
@@ -106,6 +118,7 @@ public:
 		}
 		t[0]=t0;
 		pz[0]=p0;
+		status_update();
 	};
 // Initialize with defualt normal distribution.
 	bunch() {
@@ -117,6 +130,9 @@ public:
 		py.resize(Np);
 		pz.resize(Np);
         index.resize(Np);
+        M1.resize(6,0);
+        M2.resize(6,0);
+        Emittance.resize(3,0);
 		/* So far only the Gaussian distribution is supported */
 		std::default_random_engine generator; // Normal distribution generator
 		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
@@ -158,7 +174,10 @@ public:
 		py.resize(Np);
 		pz.resize(Np);
         index.resize(Np);
-
+        M1.resize(6,0);
+        M2.resize(6,0);
+        Emittance.resize(3,0);
+        
 	    for (int i = 0;i<Np;++i){
 	        x[i] = values[6*i];// meter
 	        px[i] = values[6*i+1];//rad, will be converted to real momentum later.
@@ -176,7 +195,7 @@ public:
 			py[i] = py[i]*pz[i];
 	    }
 
-	    p0 = std::accumulate(pz.begin(),pz.end(),0.0)/Np;
+	    p0 = __gnu_parallel::accumulate(pz.begin(),pz.end(),0.0)/Np;
 	    std::cout<<p0<<std::endl;
 		gamma0 = sqrt(p0*p0/(me*c*c*me)+1);
 		std::cout<<gamma0<<std::endl;
@@ -184,14 +203,44 @@ public:
 	
     // get the sorted index based on the time coordinates of the particles.
     void sort(){
-        std::sort(index.begin(),index.end(),[&](const double& a,const double& b){return (t[a]<t[b]);}
+        __gnu_parallel::sort(index.begin(),index.end(),[&](const double& a,const double& b){return (t[a]<t[b]);}
         );
     };
     
+    // Get the statistics of the bunch.
+    void status_update(){
+        M1[0] = __gnu_parallel::accumulate(x.begin(),x.end(),0.0)/Np;
+        M1[1] = __gnu_parallel::accumulate(y.begin(),y.end(),0.0)/Np;
+        M1[2] = __gnu_parallel::accumulate(t.begin(),t.end(),0.0)/Np;
+        M1[3] = __gnu_parallel::accumulate(px.begin(),px.end(),0.0)/Np;
+        M1[4] = __gnu_parallel::accumulate(py.begin(),py.end(),0.0)/Np;
+        M1[5] = __gnu_parallel::accumulate(pz.begin(),pz.end(),0.0)/Np;
+        
+        M2[0] = covariance(x,x,M1[0],M1[0]);
+        M2[1] = covariance(y,y,M1[1],M1[1]);
+        M2[2] = covariance(t,t,M1[2],M1[2]);
+        M2[3] = covariance(px,px,M1[3],M1[3])/(M1[5]*M1[5]); //covariance of the angle px/pz
+        M2[4] = covariance(py,py,M1[4],M1[4])/(M1[5]*M1[5]); //covariance of the angle py/pz
+        M2[5] = covariance(pz,pz,M1[5],M1[5])*c*c/qe/qe;     //covariance of the Kinetic energy.
+        
+        Emittance[0] = sqrt(M2[0]*M2[3]-covariance(x,px,M1[0],M1[3]));
+        Emittance[1] = sqrt(M2[1]*M2[4]-covariance(y,py,M1[1],M1[4]));        
+        Emittance[2] = sqrt(M2[2]*M2[5]-covariance(t,pz,M1[2],M1[5]));        
+    }
     
     
+    // Dump the moments to file.
+    void dump_to_file(std::string path) {
+		std::filebuf fb;
+		fb.open(path, std::ios::out);
+		std::ostream os(&fb);
+		os << M1[0] << "," << M1[1] << ","<< M1[2] << ","<< M1[3] << ","<< M1[4] << ","<< M1[5] << "\n"
+		<< M2[0] << "," << M2[1] << ","<< M2[2] << ","<< M2[3] << ","<< M2[4] << ","<< M2[5] << "\n"
+		<< Emittance[0] << "," << Emittance[1] << ","<< Emittance[2];
+		fb.close();
+	};
 	// dump the whole bunch to a file. file name is specified by 'path'.
-	void dump_to_file(std::string path) {
+	void dump_coords_to_file(std::string path) {
 		std::filebuf fb;
 		fb.open(path, std::ios::out);
 		std::ostream os(&fb);
@@ -218,7 +267,6 @@ public:
         for (int i = 0;i<N_trains;++i){
             for (int j = 0;j<N_bnches_per_train;++j){
                 bnches[i*N_bnches_per_train+j] = bunch(N,i*gap+(i*N_bnches_per_train+j)*delay);
-
             }
 		}
 	};
@@ -313,14 +361,17 @@ public:
 	        }
 	        wake_initialized = 1;
 	    }
+	    
         int j = 0;
 #pragma omp parallel for private(j)
 	    for(int i = 0;i<N_mod;++i){ // iterate over number of modes.
 	        double Vbx = kx[i]*bnch.q;// always negative(?) imaginary.
 	        double Vby = ky[i]*bnch.q;// always negative(?) imaginary.
 	        double Vbz = -kz[i]*bnch.q;// always negative real.
-	        double dT = bnch.t[bnch.index[0]]-t_last;
+	        double dT = bnch.t[bnch.index[0]]-t_last+bm.delay;
+       	    //std::cout<<"Delay between bunches:"<<dT<<std::endl;
 	        double decay = exp(-dT*tau_invert[i]);// decay of wake from last bunch
+	        //std::cout<<"Decay factor of the wake:"<<decay<<std::endl;
 	        double dphi = dT*frq[i]*2.0*pi; // phase shift of the wake from last bunch.
 
 	        // rotated wake from last bunch:
@@ -358,6 +409,8 @@ public:
 	        VzTauI[i][bnch.Np] = VzTauI[i][j-1];
 	    }
 	    t_last = bnch.t[bnch.index[bnch.Np-1]];
+
+	    
 	    /*
 	    std::cout<<"Wake after bunch leaves the cavity is: VxR,VxI,VyR,VyI,VzR,VzI= "<< VxTauR[0][bnch.Np]<<","<<VxTauI[0][bnch.Np]<<","<<VyTauR[0][bnch.Np]<<","<<VyTauI[0][bnch.Np]<<","<<VzTauR[0][bnch.Np]<<","<<VzTauI[0][bnch.Np]<<std::endl;
 	    */
@@ -370,21 +423,24 @@ public:
 	        double fi=frq[i];
 	        double phiN = phi[i]/180.0*pi;
 	        double taui=tau_invert[i];
-	        double Vbz = -kz[i]*bnch.N;// always negative real.
+	        double Vbz = -kz[i]*bnch.q;// always negative real.
 #pragma omp for
 		    for (int j = 0; j<bnch.Np; ++j) { // iterate over all particles
 
 			    int tempID = bnch.index[j];
 			    double cosphi = cos(2.0 * pi*fi*bnch.t[tempID]+phiN);
 			    double sinphi = sin(2.0 * pi*fi*bnch.t[tempID]+phiN);
-			    double expi = exp(-(bnch.t[tempID])*taui);
+			    //double expi = exp(-(bnch.t[tempID])*taui);
 			    // The voltage each particle sees is the real part of the complex voltage in cavity at that time, 
 			    // It should be the combination of the cavity voltage (including the previous wake_voltage), and half of the self field(z). 
 			    bnch.px[tempID] += qoc*(V0xR[i]*cosphi-V0xI[i]*sinphi+VxTauR[i][j]); // kick in x direction. cannot see self field.
 			    bnch.py[tempID] += qoc*(V0yR[i]*cosphi-V0yI[i]*sinphi+VyTauR[i][j]); // kick in y direction.
-			    bnch.pz[tempID] += qoc*((V0zR[i]*cosphi-V0zI[i]*sinphi+VzTauR[i][j])+(V0xR[i]*cosphi-V0xI[i]*sinphi)*(2*pi*fi)/c*bnch.x[tempID]+(V0yR[i]*cosphi-V0yI[i]*sinphi)*(2*pi*fi)/c*bnch.y[tempID]+Vbz*0.5); // kick in z direction.
+			    bnch.pz[tempID] += qoc*((V0zR[i]*cosphi-V0zI[i]*sinphi+VzTauR[i][j])+(V0xR[i]*cosphi-V0xI[i]*sinphi)*(2*pi*fi)/c*bnch.x[tempID]+(V0yR[i]*cosphi-V0yI[i]*sinphi)*(2*pi*fi)/c*bnch.y[tempID]+Vbz*0.5); // kick in z direction
 		    }
 		}
+		/*
+		std::cout<<"Cavity field after bunch leaves the cavity is: VxR,VxI,VyR,VyI,VzR,VzI= "<<V0xR[0]<<","<<V0xI[0]<<","<<V0yR[0]<<","<<V0yI[0]<<","<<V0zR[0]<<","<<V0zI[0]<<std::endl;
+		*/
 		// Update the bunch momentum and energy.
 		bnch.p0 = std::accumulate(bnch.pz.begin(),bnch.pz.end(),0.0)/bnch.pz.size();
 		bnch.gamma0 = sqrt(bnch.p0*bnch.p0/(bnch.me*bnch.me*c*c)+1.0);
@@ -455,7 +511,7 @@ public:
 	    double alpha0 = 1.0/GAMTSQ;
 	    double GM0SQ_inv = 1.0/(bnch.gamma0*bnch.gamma0);
 	    double p0_inv = 1.0/bnch.p0;
-	    double ita = alpha0-GM0SQ_inv;
+
 	    double f0_inv = (2.0*pi*R)/(c*sqrt(1.0-GM0SQ_inv)); // Revolution time.
         /*
         std::cout<< "bnch.pz[i] "<<bnch.pz[0]<<std::endl;
@@ -470,13 +526,15 @@ public:
 		    double px = bnch.px[i];
 		    double py = bnch.py[i];
 		    double pz_inv = 1/bnch.pz[i];
+		    double ita = alpha0-GM0SQ_inv;//+0.01*delta+0.001*delta*delta;
 			bnch.x[i] = x * (cosphix + alpx*sinphix) + betax*sinphix*px*pz_inv;//bnch.x[i];//
 			bnch.y[i] = y * (cosphiy + alpy*sinphiy) + betay*sinphiy*py*pz_inv;//bnch.y[i];//
-			bnch.t[i] += f0_inv/(1.0-1.0/((ita)*delta));
+			bnch.t[i] += f0_inv/(-1.0+1.0/((ita)*delta));//f0_inv;//f0_inv/(1.0-1.0/((ita)*delta));
 			bnch.px[i] = -x * (1.0 + alpx*alpx) / betax*sinphix *bnch.pz[i]+ cosphix*px;//bnch.px[i];//
 			bnch.py[i] = -y * (1.0 + alpy*alpy) / betay*sinphiy *bnch.pz[i]+ cosphiy*py;//bnch.py[i];//
 			bnch.pz[i] += 0;
 		}
+
 	};
 };
 

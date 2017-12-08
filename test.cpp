@@ -10,7 +10,7 @@
 
 int main() {
     
-	unsigned int N = 1e6;   // particles per bunch.
+	unsigned int N = 1e3;   // particles per bunch.
 	unsigned int N_bnches_p_train = 1; // bunches per train.
 	unsigned int N_trns = 1; // number of trains
 	double dly = 1/704e6;
@@ -67,14 +67,12 @@ int main() {
 	// Try initialize cavity, ring and drift space.
 	cavity cvt = cavity();
 	cavity cvt2 = cavity();
-	cvt.frq[0] = 704e6;//78239.554893733875*10;
 	cvt.V0zR[0] = 0;
-	cvt.V0zI[0] = 0;//-1e5;
+	cvt.V0zI[0] = 1e6;//-1e5;
 	cvt.phi[0] = 0;
-	cvt.kz[0] = 1.10584061406e11*2;// 1/4*(w*R/Q)
-	cvt.tau_invert[0] = 1/4.521447e-5; // 2 Q/w
+	//cvt.kz[0] = 1.10584061406e11*2;// 1/4*(w*R/Q)
+	//cvt.tau_invert[0] =1/4.521447e-5; // 2 Q/w
 	
-	cvt2.frq[0] = 78239.554893733875*20;
 	cvt2.V0zR[0] = 0;
 	cvt2.V0zI[0] = 0;
 	cvt2.phi[0] = 0;
@@ -86,33 +84,39 @@ int main() {
 	// Try to iterate all particles in a bunch to update and apply the kicks
 
 	std::string path = "data";
-	unsigned int N_turns = 1;
+	unsigned int N_turns = 100000;
 	bm1.bnches[0].dump_to_file(path+std::to_string(0)+std::to_string(0)+"before");
+	bm1.bnches[0].dump_coords_to_file(path+std::to_string(0)+std::to_string(0)+"before_coords");
 	std::vector<double> temp_t;
 	std::vector<double> temp_pz;
 	std::vector<double> temp_vc;
+	
 	//std::cout<<bm1.bnches[0].p0<<std::endl;
 	start_time = omp_get_wtime();
 	for (unsigned int i = 0; i<N_turns; ++i) {
 	    rng.update_f0(bm1.bnches[0]);
-	//    cvt.frq[0]=rng.f0*360;
-	//    cvt2.frq[0]=rng.f0*720;
+	    cvt.frq[0]=rng.f0*360;
+	    cvt2.frq[0]=rng.f0*720;
+	    bm1.delay = 1/rng.f0;
+	//    std::cout<<"cvt frq = "<< cvt.frq[0] <<std::endl;
     //    std::cout<<"Beam energy: "<<(bm1.bnches[0].gamma0-60.0)*bm1.bnches[0].me*c*c/bm1.bnches[0].qe<<std::endl;
-    //    cvt.V0zI[0] += 1e5/N_turns;
-    //    cvt2.V0zI[0] +=2e5/N_turns;
+        cvt.V0zI[0] -= 1e6/N_turns;
+        cvt2.V0zI[0] -=2e6/N_turns;
 	    for (unsigned int j = 0;j< N_bnches_p_train*N_trns;++j){
 	        bm1.bnches[j].sort();
     //	    std::cout<<"Calculating wake..."<<std::endl;
             cvt.wake_Naive(bm1,bm1.bnches[j]);
-	//	    cvt.update_coord(bm1.bnches[j]);
-	//	    cvt2.wake_Naive(bm1,bm1.bnches[j]);
-	//	    cvt2.update_coord(bm1.bnches[j]);
+		    cvt.update_coord(bm1.bnches[j]);
+		    cvt2.wake_Naive(bm1,bm1.bnches[j]);
+		    cvt2.update_coord(bm1.bnches[j]);
 		    rng.update_coord(bm1.bnches[j]);
 	//        dft.update_coord(bm1.bnches[j]);
 	//        temp_t.push_back(bm1.bnches[0].t[0]*2*pi*cvt.frq[0]);
-	        temp_t.push_back(bm1.bnches[j].t[N-1]*1e9);
-            temp_pz.push_back((bm1.bnches[0].px[0]/bm1.bnches[0].p0-1));
+	        bm1.bnches[j].status_update();
+	        temp_t.push_back(bm1.bnches[0].t[0]);
+            temp_pz.push_back((bm1.bnches[0].pz[0]/bm1.bnches[0].M1[5]-1));
             temp_vc.push_back(sqrt(cvt.VzTauR[0][bm1.bnches[0].x.size()]*cvt.VzTauR[0][bm1.bnches[0].x.size()]+cvt.VzTauI[0][bm1.bnches[0].x.size()]*cvt.VzTauI[0][bm1.bnches[0].x.size()]));
+            
             if ((i*N_bnches_p_train*N_trns+j)%(N_bnches_p_train*N_trns*N_turns/10)==0){
 	            std::cout<<int(float(i*N_bnches_p_train*N_trns+j)/float(N_bnches_p_train*N_trns*N_turns)*100)<<"%..."<<std::endl;
 	        }
@@ -120,7 +124,8 @@ int main() {
 	}
 	time = omp_get_wtime() - start_time;
 	std::cout << "Total time spend on tracking: "<< time*1000<<" ms."<<std::endl;
-	std::cout << "Time spend on finish one round of kick:" << time * 1000 / N_turns << " ms." << std::endl;
+	std::cout << "Time spend on finish kick on one bunch:" << time * 1000 / N_turns/N_bnches_p_train/N_trns << " ms." << std::endl;
+    std::cout << "Dumpping to files..."<< std::endl;
 	std::string cavity_voltage = "cavity";
 	cvt.dump_voltage(cavity_voltage);
 	std::string t = "tempT";
@@ -129,15 +134,9 @@ int main() {
 	dump_to_file (t,temp_t);
 	dump_to_file(pz,temp_pz);
 	dump_to_file (vc, temp_vc);
+	bm1.bnches[0].dump_coords_to_file(path+std::to_string(0)+std::to_string(0)+"after_coords");
     bm1.bnches[0].dump_to_file(path+std::to_string(0)+std::to_string(0)+"after");
-	
-	/*
-	start_time = omp_get_wtime();
-	path = "data2.txt";
-	bm1.bnch.dump_to_file(path);
-	time = omp_get_wtime() - start_time;
-	std::cout << "Time spend on dumping the bunch to file (serial):" << time * 1000 << " ms" << std::endl;
-	*/
+    std::cout << "Finished:)"<< std::endl;
 
 	return 0;
 }
