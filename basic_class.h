@@ -2,8 +2,10 @@
 #include <algorithm>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <random>
 #include <math.h>
+
 #include <parallel/algorithm>
 #include <parallel/numeric>
 
@@ -102,9 +104,9 @@ public:
 		std::normal_distribution<double> dist0(0, 1e-3); // normal distribution in x
 		std::normal_distribution<double> dist1(0, 1e-3); // normal distribution in y
 		std::normal_distribution<double> dist2(0, 1.4e-9); // normal distribution in t
-		std::normal_distribution<double> dist3(0, 1e-4); // normal distribution in px
-		std::normal_distribution<double> dist4(0, 1e-4); // normal distribution in py
-		std::normal_distribution<double> dist5(0, 0.00225); // normal distribution in gamma
+		std::normal_distribution<double> dist3(0, 1e-4); // normal distribution in x'
+		std::normal_distribution<double> dist4(0, 1e-4); // normal distribution in y'
+		std::normal_distribution<double> dist5(0, 0.00225); // normal distribution in pzs
 		// initialize the particles in one bunch in parallel.
 #pragma omp parallel for
 		for (int j = 0; j<Np; ++j) {
@@ -223,9 +225,14 @@ public:
         M2[4] = covariance(py,py,M1[4],M1[4])/(M1[5]*M1[5]); //covariance of the angle py/pz
         M2[5] = covariance(pz,pz,M1[5],M1[5])*c*c/qe/qe;     //covariance of the Kinetic energy.
         
-        Emittance[0] = sqrt(M2[0]*M2[3]-covariance(x,px,M1[0],M1[3]));
-        Emittance[1] = sqrt(M2[1]*M2[4]-covariance(y,py,M1[1],M1[4]));        
-        Emittance[2] = sqrt(M2[2]*M2[5]-covariance(t,pz,M1[2],M1[5]));        
+        Emittance[0] = sqrt(M2[0]*M2[3]-covariance(x,px,M1[0],M1[3])*covariance(x,px,M1[0],M1[3])/(M1[5]*M1[5]));
+        Emittance[1] = sqrt(M2[1]*M2[4]-covariance(y,py,M1[1],M1[4])*covariance(y,py,M1[1],M1[4])/(M1[5]*M1[5]));        
+        Emittance[2] = sqrt(M2[2]*M2[5]-covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5])*(c/qe*c/qe));   
+        /*
+        std::cout<<"sig_t^2*sig_Ek^2:"<<M2[2]*M2[5]<<std::endl;
+        std::cout<<"sig_t_Ek^2:"<<covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5])*(c/qe*c/qe)<<std::endl;
+        */
+        gamma0 = sqrt(p0*p0/(me*c*c*me)+1);
     }
     
     
@@ -571,5 +578,76 @@ public:
     double R=610.1754; // radius of the ring.
     double gammaT; // Transision energy of the ring.
     
+};
+
+// Class of output buffer
+class outputs{
+public:
+    unsigned int recordLength;
+    std::vector<double> gamma;
+    std::vector<double> sig_t;
+    std::vector<double> sig_Ek;
+    std::vector<double> sig_x;
+    std::vector<double> sig_xprime;
+    std::vector<double> sig_y;
+    std::vector<double> sig_yprime;
+    std::vector<double> emittance;
+    std::vector<unsigned int> turn_stamp;
+    outputs(unsigned int N_records){
+        recordLength = N_records;
+        gamma.resize(N_records,0);
+        sig_t.resize(N_records,0);
+        sig_Ek.resize(N_records,0);
+        sig_x.resize(N_records,0);
+        sig_xprime.resize(N_records,0);
+        sig_y.resize(N_records,0);
+        sig_yprime.resize(N_records,0);
+        emittance.resize(N_records*3,0);
+        turn_stamp.resize(N_records,0);   
+    };
+    void update(bunch& bnch,unsigned int n_of_records,unsigned int turns_per_record){
+            gamma[n_of_records] = bnch.gamma0;
+	        sig_t[n_of_records] = sqrt(bnch.M2[2]);
+	        sig_Ek[n_of_records] = sqrt(bnch.M2[5]);
+	        sig_x[n_of_records] = sqrt(bnch.M2[0]);
+	        sig_xprime[n_of_records] = sqrt(bnch.M2[3]);
+	        sig_y[n_of_records] = sqrt(bnch.M2[1]);
+	        sig_yprime[n_of_records] = sqrt(bnch.M2[4]);
+	        emittance[n_of_records*3] = bnch.Emittance[0];
+	        emittance[n_of_records*3+1] = bnch.Emittance[1];
+	        emittance[n_of_records*3+2] = bnch.Emittance[2];
+	        turn_stamp[n_of_records] = n_of_records*turns_per_record;
+    }
+    
+    void dump_to_file(std::string& path){
+	    std::filebuf fb;
+		fb.open(path, std::ios::out);
+		std::ostream os(&fb);
+		os<<std::left<<std::setw(20)<<"Turn stamp";
+		os<<std::left<<std::setw(20)<<"Gamma";
+		os<<std::left<<std::setw(20)<<"sig_t (s)";
+		os<<std::left<<std::setw(20)<<"sig_Ek (eV)";
+		os<<std::left<<std::setw(20)<<"sig_x (m)";
+		os<<std::left<<std::setw(20)<<"sig_xprime (rad)";
+        os<<std::left<<std::setw(20)<<"sig_y (m)";
+		os<<std::left<<std::setw(20)<<"sig_yprime (rad)";
+		os<<std::left<<std::setw(20)<<"Emittance_x (m-rad)";
+		os<<std::left<<std::setw(20)<<"Emittance_y (m-rad)";		
+		os<<std::left<<std::setw(20)<<"Emittance_z (eV.s)"<<std::endl;
+		for (int i = 0; i<recordLength; ++i) {
+		    os<<std::left<<std::setw(20)<<turn_stamp[i];
+		    os<<std::left<<std::setw(20)<<gamma[i];
+		    os<<std::left<<std::setw(20)<<sig_t[i];
+		    os<<std::left<<std::setw(20)<<sig_Ek[i];
+		    os<<std::left<<std::setw(20)<<sig_x[i];
+		    os<<std::left<<std::setw(20)<<sig_xprime[i];
+		    os<<std::left<<std::setw(20)<<sig_y[i];
+		    os<<std::left<<std::setw(20)<<sig_yprime[i];
+		    os<<std::left<<std::setw(20)<<emittance[i*3];
+		    os<<std::left<<std::setw(20)<<emittance[i*3+1];
+		    os<<std::left<<std::setw(20)<<emittance[i*3+2]<<std::endl;
+		}
+		fb.close();
+	}
 };
 
