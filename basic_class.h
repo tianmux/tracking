@@ -9,10 +9,12 @@
 #include <parallel/algorithm>
 #include <parallel/numeric>
 
+
+
 /*Global constants*/
 
-double c = 3e8;
-double pi = M_PI;//3.1415926;
+const double c = 299792458;
+const double pi = M_PI;
 
 
 // Class of Bunch
@@ -163,7 +165,7 @@ public:
 	    std::vector<double> values;
 	    in.open(path);
 	    getline(in,val);
-	    int i = 0;
+
 	    while(in>>val){
 	        values.push_back(stod(val));
 	    }
@@ -223,11 +225,11 @@ public:
         M2[2] = covariance(t,t,M1[2],M1[2]);
         M2[3] = covariance(px,px,M1[3],M1[3])/(M1[5]*M1[5]); //covariance of the angle px/pz
         M2[4] = covariance(py,py,M1[4],M1[4])/(M1[5]*M1[5]); //covariance of the angle py/pz
-        M2[5] = covariance(pz,pz,M1[5],M1[5])*c*c/qe/qe;     //covariance of the Kinetic energy.
+        M2[5] = covariance(pz,pz,M1[5],M1[5]);     //covariance of the pz.
         
         Emittance[0] = sqrt(M2[0]*M2[3]-covariance(x,px,M1[0],M1[3])*covariance(x,px,M1[0],M1[3])/(M1[5]*M1[5]));
         Emittance[1] = sqrt(M2[1]*M2[4]-covariance(y,py,M1[1],M1[4])*covariance(y,py,M1[1],M1[4])/(M1[5]*M1[5]));        
-        Emittance[2] = sqrt(M2[2]*M2[5]-covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5])*(c/qe*c/qe));   
+        Emittance[2] = sqrt(M2[2]*M2[5]-covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5]))*(c/qe);   
         /*
         std::cout<<"sig_t^2*sig_Ek^2:"<<M2[2]*M2[5]<<std::endl;
         std::cout<<"sig_t_Ek^2:"<<covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5])*(c/qe*c/qe)<<std::endl;
@@ -435,8 +437,9 @@ public:
 		    for (int j = 0; j<bnch.Np; ++j) { // iterate over all particles
 
 			    int tempID = bnch.index[j];
-			    double cosphi = cos(2.0 * pi*fi*bnch.t[tempID]+phiN);
-			    double sinphi = sin(2.0 * pi*fi*bnch.t[tempID]+phiN);
+			    double dphi = 2.0 * pi*fi*bnch.t[tempID]+phiN;
+			    double cosphi = cos(dphi);
+			    double sinphi = sin(dphi);
 			    //double expi = exp(-(bnch.t[tempID])*taui);
 			    // The voltage each particle sees is the real part of the complex voltage in cavity at that time, 
 			    // It should be the combination of the cavity voltage (including the previous wake_voltage), and half of the self field(z). 
@@ -523,7 +526,7 @@ public:
         /*
         std::cout<< "bnch.pz[i] "<<bnch.pz[0]<<std::endl;
         std::cout<< "bnch.px[i] "<<bnch.px[0]<<std::endl;     
-        */   
+        */
 #pragma omp parallel for        
         // zeroth order transportation
 		for (int i = 0; i<bnch.Np; ++i) {
@@ -577,7 +580,6 @@ public:
     double* ks; // loss factors of each mode in a cabity.
     double R=610.1754; // radius of the ring.
     double gammaT; // Transision energy of the ring.
-    
 };
 
 // Class of output buffer
