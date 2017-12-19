@@ -234,6 +234,8 @@ public:
         std::cout<<"sig_t^2*sig_Ek^2:"<<M2[2]*M2[5]<<std::endl;
         std::cout<<"sig_t_Ek^2:"<<covariance(t,pz,M1[2],M1[5])*covariance(t,pz,M1[2],M1[5])*(c/qe*c/qe)<<std::endl;
         */
+        // Use the first particle as the reference particle.
+        p0 = pz[0];
         gamma0 = sqrt(p0*p0/(me*c*c*me)+1);
     }
     
@@ -448,12 +450,54 @@ public:
 			    bnch.pz[tempID] += qoc*((V0zR[i]*cosphi-V0zI[i]*sinphi+VzTauR[i][j])+(V0xR[i]*cosphi-V0xI[i]*sinphi)*(2*pi*fi)/c*bnch.x[tempID]+(V0yR[i]*cosphi-V0yI[i]*sinphi)*(2*pi*fi)/c*bnch.y[tempID]+Vbz*0.5); // kick in z direction
 		    }
 		}
-		/*
-		std::cout<<"Cavity field after bunch leaves the cavity is: VxR,VxI,VyR,VyI,VzR,VzI= "<<V0xR[0]<<","<<V0xI[0]<<","<<V0yR[0]<<","<<V0yI[0]<<","<<V0zR[0]<<","<<V0zI[0]<<std::endl;
-		*/
 		// Update the bunch momentum and energy.
 		bnch.p0 = std::accumulate(bnch.pz.begin(),bnch.pz.end(),0.0)/bnch.pz.size();
 		bnch.gamma0 = sqrt(bnch.p0*bnch.p0/(bnch.me*bnch.me*c*c)+1.0);
+	};
+	
+	void update_coord_no_wake(bunch& bnch) {
+	    double qoc = bnch.qe/c;
+#pragma omp parallel	    
+	    for (int i = 0;i<N_mod;++i){ // iterate over all modes
+	        double fi=frq[i];
+	        double phiN = phi[i]/180.0*pi;
+#pragma omp for
+		    for (int j = 0; j<bnch.Np; ++j) { // iterate over all particles
+			    double dphi = 2.0 * pi*fi*bnch.t[j]+phiN;
+			    double cosphi = cos(dphi);
+			    double sinphi = sin(dphi);
+			    //double expi = exp(-(bnch.t[tempID])*taui);
+			    // The voltage each particle sees is the real part of the complex voltage in cavity at that time, 
+			    // It should be the combination of the cavity voltage (including the previous wake_voltage), and half of the self field(z). 
+			    bnch.px[j] += qoc*(V0xR[i]*cosphi-V0xI[i]*sinphi); // kick in x direction. cannot see self field.
+			    bnch.py[j] += qoc*(V0yR[i]*cosphi-V0yI[i]*sinphi); // kick in y direction.
+			    bnch.pz[j] += qoc*((V0zR[i]*cosphi-V0zI[i]*sinphi)+(V0xR[i]*cosphi-V0xI[i]*sinphi)*(2*pi*fi)/c*bnch.x[j]+(V0yR[i]*cosphi-V0yI[i]*sinphi)*(2*pi*fi)/c*bnch.y[j]); // kick in z direction
+		    }
+		}
+		// Update the bunch momentum and energy.
+		bnch.p0 = std::accumulate(bnch.pz.begin(),bnch.pz.end(),0.0)/bnch.pz.size();
+		bnch.gamma0 = sqrt(bnch.p0*bnch.p0/(bnch.me*bnch.me*c*c)+1.0);
+	};
+	
+	void update_coord_no_wake_1D(bunch& bnch) {
+	    double qoc = bnch.qe/c;
+//#pragma omp parallel	    
+	    for (int i = 0;i<N_mod;++i){ // iterate over all modes
+	        double fi=frq[i];
+	        double phiN = phi[i]/180.0*pi;
+#pragma omp parallel for
+		    for (int j = 0; j<bnch.Np; ++j) { // iterate over all particles
+			    double dphi = 2.0 * pi*fi*bnch.t[j]+phiN;
+			    double cosphi = cos(dphi);
+			    double sinphi = sin(dphi);
+			    bnch.pz[j] += qoc*((V0zR[i]*cosphi-V0zI[i]*sinphi)); // kick in z direction
+		    }
+		}
+		/*
+		// Update the bunch momentum and energy.
+		bnch.p0 = std::accumulate(bnch.pz.begin(),bnch.pz.end(),0.0)/bnch.pz.size();
+		bnch.gamma0 = sqrt(bnch.p0*bnch.p0/(bnch.me*bnch.me*c*c)+1.0);
+		*/
 	};
 	
 	void dump_voltage(std::string& path){
