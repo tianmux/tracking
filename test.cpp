@@ -14,10 +14,10 @@ double max(double a,double b){
 }
 */
 int main() {
-	unsigned int N = 1e6;   // particles per bunch.
+	unsigned int N = 1<<20;   // particles per bunch.
 	unsigned int N_bnches_p_train = 1; // bunches per train.
 	unsigned int N_trns = 1e0; // number of trains
-	unsigned int N_turns = 1e1;
+	unsigned int N_turns = 1e1; // number of turns to track.
 	unsigned int N_steps_btwn_records = 1; // number of turns between records.
 	double dly = 1/704e6;
 	double gp = 0/704e6;
@@ -79,11 +79,11 @@ int main() {
 	cvt.phi[0] = 10;
 	cvt.kz[0] = 0;//1.10584061406e11*2;// 1/4*(w*R/Q)
 	cvt.tau_invert[0] =0;//1/4.521447e-5; // 2 Q/w
-	
+	/*
 	cvt2.V0zR[0] = 0;
 	cvt2.V0zI[0] = 0;
 	cvt2.phi[0] = 0;
-	
+	*/
 	ring rng = ring();
 	drift_space dft = drift_space(1.73);
     std::cout<<"Initialize cavity and ring successfully."<<std::endl;
@@ -110,7 +110,7 @@ int main() {
 
 	    rng.update_f0(bm1.bnches[0]);
 	    cvt.frq[0]=rng.f0*120;
-	    cvt2.frq[0]=rng.f0*240;
+	//    cvt2.frq[0]=rng.f0*240;
 	    bm1.delay = 1.0/rng.f0;
 	//    std::cout<<"cvt frq = "<< cvt.frq[0] <<std::endl;
     //    std::cout<<"Beam energy: "<<(bm1.bnches[0].gamma0-60.0)*bm1.bnches[0].me*c*c/bm1.bnches[0].qe<<std::endl;
@@ -121,22 +121,22 @@ int main() {
 	    for (unsigned int j = 0;j< N_bnches_p_train*N_trns;++j){
 	    
 	        start = std::chrono::high_resolution_clock::now();
-	//        bm1.bnches[j].sort();
+	        bm1.bnches[j].sort();
 	        finish = std::chrono::high_resolution_clock::now();
 	        elapsed = finish - start;
 	//        std::cout<<"Time spent on sorting: "<< elapsed.count()*1000<<" ms."<<std::endl;
 	        
     //	    std::cout<<"Calculating wake..."<<std::endl;
             start = std::chrono::high_resolution_clock::now();
-    //        cvt.wake_Naive(bm1,bm1.bnches[j]);
+            cvt.wake_Naive(bm1,bm1.bnches[j]);
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
 	//       std::cout<<"Time spent on waking: "<< elapsed.count()*1000<<" ms."<<std::endl;
 		   
 		    start = std::chrono::high_resolution_clock::now();
-		    cvt.update_coord_no_wake_1D(bm1.bnches[j]);
+	//	    cvt.update_coord_no_wake_1D(bm1.bnches[j]);
 	//	    cvt.update_coord_no_wake(bm1.bnches[j]);
-    //        cvt.update_coord(bm1.bnches[j]);
+            cvt.update_coord(bm1.bnches[j]);
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
 	//        std::cout<<"Time spent on kicking: "<< elapsed.count()*1000<<" ms."<<std::endl;
@@ -181,8 +181,11 @@ int main() {
 	        otpt.update(b1, i/N_steps_btwn_records,N_steps_btwn_records);
 	        double xrange = max(abs(max_para(b1.t)-b1.M1[2]),abs(min_para(b1.t)-b1.M1[2]));
 	        double yrange = max(abs(max_para(b1.pz)-b1.M1[5]),abs(min_para(b1.pz)-b1.M1[5]));
-	        //p.plot_data(bm1.bnches[0].t,bm1.bnches[0].pz, bm1.bnches[0].M1[2]+xrange, bm1.bnches[0].M1[5]+yrange, bm1.bnches[0].M1[2]-xrange, bm1.bnches[0].M1[5]-yrange,i*bm1.delay);
-	        //p.plot_data(bm1.bnches[0].t,bm1.bnches[0].pz, bm1.bnches[0].M1[2]+1/cvt2.frq[0], bm1.bnches[0].M1[5]*(1+0.01), bm1.bnches[0].M1[2]-1/cvt2.frq[0], bm1.bnches[0].M1[5]*(1-0.01),i*bm1.delay);
+	        /*
+	        p.plot_data(bm1.bnches[0].t,bm1.bnches[0].pz, bm1.bnches[0].M1[2]+xrange, bm1.bnches[0].M1[5]+yrange, bm1.bnches[0].M1[2]-xrange, bm1.bnches[0].M1[5]-yrange,i*bm1.delay);
+	        /*
+	        p.plot_data(bm1.bnches[0].t,bm1.bnches[0].pz, bm1.bnches[0].M1[2]+1/cvt2.frq[0], bm1.bnches[0].M1[5]*(1+0.01), bm1.bnches[0].M1[2]-1/cvt2.frq[0], bm1.bnches[0].M1[5]*(1-0.01),i*bm1.delay);
+	        */
 	    }
 	}
 	time = omp_get_wtime() - start_time;
