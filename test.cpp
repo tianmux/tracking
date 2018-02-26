@@ -72,13 +72,17 @@ int main() {
 
 	// Try initialize cavity, ring and drift space.
 	std::cout<<"Initializing the cavities and ring..."<<std::endl;
-	cavity cvt = cavity();
-	cavity cvt2 = cavity();
-	cvt.V0zR[0] = 0;
-	cvt.V0zI[0] = 1e6;//-1e5;
-	cvt.phi[0] = 10;
-	cvt.kz[0] = 0;//1.10584061406e11*2;// 1/4*(w*R/Q)
-	cvt.tau_invert[0] =0;//1/4.521447e-5; // 2 Q/w
+	int n_mods = 16;
+	cavity cvt = cavity(n_mods);
+	cavity cvt2 = cavity(n_mods);
+	for (int i = 0; i < n_mods;++i){
+	cvt.frq[i] = 1;
+	cvt.V0zR[i] = 0;
+	cvt.V0zI[i] = 1e6;//-1e5;
+	cvt.phi[i] = 10;
+	cvt.kz[i] = 0;//1.10584061406e11*2;// 1/4*(w*R/Q)
+	cvt.tau_invert[i] =0;//1/4.521447e-5; // 2 Q/w
+	}
 	/*
 	cvt2.V0zR[0] = 0;
 	cvt2.V0zI[0] = 0;
