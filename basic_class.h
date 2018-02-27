@@ -363,8 +363,7 @@ public:
     int N_mod=8;// number of modes to consider
     int bnch_count = 0; // The number of bunches that has already passed the cavity, used to calculate wake field.
     int wake_initialized = 0;
-	cavity(int n_mods) {
-		N_mod = n_mods;
+	cavity() {
 		frq.resize(N_mod,0.0);
 		phi.resize(N_mod,0.0);
 		V0xR.resize(N_mod,0.0);
