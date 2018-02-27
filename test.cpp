@@ -15,6 +15,7 @@ double max(double a,double b){
 */
 int main() {
 	unsigned int N = 1<<20;   // particles per bunch.
+	unsigned int N_bins = 1<<8;// number of slices in each bunch.
 	unsigned int N_bnches_p_train = 1; // bunches per train.
 	unsigned int N_trns = 1e0; // number of trains
 	unsigned int N_turns = 1e1; // number of turns to track.
@@ -33,7 +34,7 @@ int main() {
 	std::vector<double> mmt0{ 0,0,0 };
 	std::vector<double> mmtSig{ 2e-3,2e-3,2e-3 };// beam angle spread
 	unsigned int dist_type = 1;
-	bunch b1 = bunch(dist_type, spc0, mmt0, spcSig, mmtSig, N,0.0);
+	bunch b1 = bunch(dist_type, spc0, mmt0, spcSig, mmtSig, N,0.0,N_bins);
 	double time = omp_get_wtime() - start_time;
 	std::cout << "Time spend on bunch initialzation (openMP):" << time * 1000 << " ms" << std::endl;
     /*
@@ -49,7 +50,7 @@ int main() {
 
 	start_time = omp_get_wtime();
 
-	beam bm1 = beam(N,N_bnches_p_train, N_trns,dly,gp);
+	beam bm1 = beam(N,N_bnches_p_train, N_trns,dly,gp, N_bins);
 
 	time = omp_get_wtime() - start_time;
 	std::cout << "Time spend on initialize a beam: " << time * 1000 << " ms" << std::endl;
@@ -97,6 +98,7 @@ int main() {
 	bm1.bnches[0].dump_to_file(path+std::to_string(0)+std::to_string(0)+"before");
 	bm1.bnches[0].dump_coords_to_file(path+std::to_string(0)+std::to_string(0)+"before_coords");
 	*/
+	
 	std::vector<double> temp_t;
 	std::vector<double> temp_pz;
 	std::vector<double> temp_vc;
@@ -108,8 +110,8 @@ int main() {
 	start_time = omp_get_wtime();
 	for (unsigned int i = 0; i<N_turns; ++i) {
 
-	    rng.update_f0(bm1.bnches[0]);
-	    cvt.frq[0]=rng.f0*120;
+	    rng.update_f0(bm1.bnches[0]); // get the revolution frequency of the bunch in the ring. based on the monentum.
+	    cvt.frq[0]=rng.f0*120; // set the cavity frequency harmonic to be 120.
 	//    cvt2.frq[0]=rng.f0*240;
 	    bm1.delay = 1.0/rng.f0;
 	//    std::cout<<"cvt frq = "<< cvt.frq[0] <<std::endl;
@@ -124,14 +126,14 @@ int main() {
 	        bm1.bnches[j].sort();
 	        finish = std::chrono::high_resolution_clock::now();
 	        elapsed = finish - start;
-	//        std::cout<<"Time spent on sorting: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on sorting: "<< elapsed.count()*1000<<" ms."<<std::endl;
 	        
     //	    std::cout<<"Calculating wake..."<<std::endl;
             start = std::chrono::high_resolution_clock::now();
             cvt.wake_Naive(bm1,bm1.bnches[j]);
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
-	//       std::cout<<"Time spent on waking: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on waking: "<< elapsed.count()*1000<<" ms."<<std::endl;
 		   
 		    start = std::chrono::high_resolution_clock::now();
 	//	    cvt.update_coord_no_wake_1D(bm1.bnches[j]);
@@ -139,7 +141,7 @@ int main() {
             cvt.update_coord(bm1.bnches[j]);
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
-	//        std::cout<<"Time spent on kicking: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on kicking: "<< elapsed.count()*1000<<" ms."<<std::endl;
 		    
 	//	    cvt2.wake_Naive(bm1,bm1.bnches[j]);
 	//	    cvt2.update_coord(bm1.bnches[j]);
@@ -148,32 +150,33 @@ int main() {
 		    rng.update_coord(bm1.bnches[j]);
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
-	//        std::cout<<"Time spent on going around the ring: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on going around the ring: "<< elapsed.count()*1000<<" ms."<<std::endl;
 		    
 
 	//	    dft.update_coord(bm1.bnches[j]);
 	//	    temp_t.push_back(bm1.bnches[0].t[0]*2*pi*cvt.frq[0]);
 	        start = std::chrono::high_resolution_clock::now();
-	//        bm1.bnches[j].status_update();
+	        bm1.bnches[j].status_update();
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
-	//        std::cout<<"Time spent on update bunch moments: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on update bunch moments: "<< elapsed.count()*1000<<" ms."<<std::endl;
 		    
 
 	        start = std::chrono::high_resolution_clock::now();
             temp_t.push_back(bm1.bnches[0].t[0]);
             temp_pz.push_back((bm1.bnches[0].pz[0]/bm1.bnches[0].M1[5]-1));
-    //        temp_vc.push_back(sqrt(cvt.VzTauR[0][bm1.bnches[0].x.size()]*cvt.VzTauR[0][bm1.bnches[0].x.size()]+cvt.VzTauI[0][bm1.bnches[0].x.size()]*cvt.VzTauI[0][bm1.bnches[0].x.size()]));
+            temp_vc.push_back(sqrt(cvt.VzTauR[0][bm1.bnches[0].x.size()]*cvt.VzTauR[0][bm1.bnches[0].x.size()]+cvt.VzTauI[0][bm1.bnches[0].x.size()]*cvt.VzTauI[0][bm1.bnches[0].x.size()]));
             finish = std::chrono::high_resolution_clock::now();
             elapsed = finish - start;
-	//        std::cout<<"Time spent on recording the results in buffer: "<< elapsed.count()*1000<<" ms."<<std::endl;
+	        std::cout<<"Time spent on recording the results in buffer: "<< elapsed.count()*1000<<" ms."<<std::endl;
 	//	    std::cout<<std::endl;
 	        
-	        /*        
+	       /*         
             if (i>10 && (i*N_bnches_p_train*N_trns+j)%(N_bnches_p_train*N_trns*N_turns/10)==0){
 	            std::cout<<int(float(i*N_bnches_p_train*N_trns+j)/float(N_bnches_p_train*N_trns*N_turns)*100)<<"%..."<<std::endl;
 	        }
 	        */
+	        
 	    }
 	   
 	    
